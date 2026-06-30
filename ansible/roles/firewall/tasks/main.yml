@@ -1,0 +1,22 @@
+---
+- name: Allow monitoring ports through UFW
+  ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    comment: "{{ item.comment }}"
+  loop: "{{ monitoring_ports }}"
+
+- name: Allow monitoring ports through the OS-level iptables filter
+  iptables:
+    chain: INPUT
+    protocol: "{{ item.proto }}"
+    destination_port: "{{ item.port }}"
+    jump: ACCEPT
+    action: insert
+    rule_num: 1
+  loop: "{{ monitoring_ports }}"
+
+- name: Save current iptables rules
+  command: netfilter-persistent save
+  changed_when: false

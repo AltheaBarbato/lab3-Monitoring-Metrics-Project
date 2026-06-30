@@ -1,0 +1,40 @@
+---
+- name: Enable NGINX stub_status endpoint for metrics scraping
+  copy:
+    dest: /etc/nginx/conf.d/stub_status.conf
+    content: |
+      server {
+          listen 127.0.0.1:8080;
+          location /stub_status {
+              stub_status;
+              allow 127.0.0.1;
+              deny all;
+          }
+      }
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload NGINX
+
+- name: Flush handlers so NGINX picks up stub_status before the exporter starts
+  meta: flush_handlers
+
+- name: Pull nginx-prometheus-exporter image
+  command: docker pull {{ nginx_exporter_container_image }}
+  register: nginx_exporter_pull_result
+  changed_when: "'Downloaded newer image' in nginx_exporter_pull_result.stdout"
+
+- name: Check if nginx_exporter container already exists
+  command: docker ps -a --filter "name={{ nginx_exporter_container_name }}" --format "{{ '{{.Names}}' }}"
+  register: nginx_exporter_container_check
+  changed_when: false
+
+- name: Run nginx_exporter container
+  command: >
+    docker run -d
+    --name {{ nginx_exporter_container_name }}
+    --restart unless-stopped
+    --network host
+    {{ nginx_exporter_container_image }}
+    --nginx.scrape-uri=http://127.0.0.1:8080/stub_status
+  when: nginx_exporter_container_name not in nginx_exporter_container_check.stdout

@@ -1,0 +1,4 @@
+---
+- import_playbook: playbooks/01-firewall.yml
+- import_playbook: playbooks/02-metrics-collection.yml
+- import_playbook: playbooks/03-dashboards.yml

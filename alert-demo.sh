@@ -1,0 +1,31 @@
+#!/bin/bash
+set -e
+
+SERVER_IP="163.192.117.50"
+SSH_KEY="$HOME/.ssh/lab1-key.pem"
+SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10"
+
+echo "=== stopping node_exporter on purpose to trigger the InstanceDown alert ==="
+ssh $SSH_OPTS "sysadmin@$SERVER_IP" "sudo docker stop node_exporter"
+
+echo ""
+echo "=== waiting 45s for Prometheus to notice and the alert to go from Pending to Firing ==="
+sleep 45
+
+echo ""
+echo "=== current alert state ==="
+curl -s "http://$SERVER_IP:9090/api/v1/alerts" | python3 -m json.tool
+
+echo ""
+echo "Check the screenshot-worthy views now:"
+echo "  http://$SERVER_IP:9090/alerts"
+echo "  http://$SERVER_IP:3000/alerting/list  (Grafana mirrors the same alert via the datasource)"
+echo ""
+read -p "Press Enter once you've got your screenshots to restart node_exporter and clear the alert..."
+
+echo "=== restarting node_exporter ==="
+ssh $SSH_OPTS "sysadmin@$SERVER_IP" "sudo docker start node_exporter"
+
+echo "=== waiting 30s for the alert to clear ==="
+sleep 30
+curl -s "http://$SERVER_IP:9090/api/v1/alerts" | python3 -m json.tool
