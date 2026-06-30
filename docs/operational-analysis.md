@@ -1,53 +1,53 @@
 # Operational Analysis Report
 **Name:** Althea Barbato
 
-## Monitoring Platform Overview
+## What's running
 
-The monitoring stack is built on three Docker containers all running on webserver01 alongside the services from the previous labs:
+Three new Docker containers added on top of what the previous labs left behind:
 
-- **Prometheus** on port 9090 — scrapes metrics every 15 seconds from three targets: node_exporter (system), nginx_exporter (web traffic), and itself
-- **Grafana** on port 3000 — dashboards built on top of Prometheus, also surfaces the Prometheus alert rules in its own alerting view
-- **nginx_exporter** — reads nginx's stub_status endpoint and exposes request rate and connection counts as Prometheus metrics
+- **Prometheus** (port 9090) — scrapes metrics every 15s from node_exporter, nginx_exporter, and itself
+- **Grafana** (port 3000) — dashboards on top of Prometheus, also shows the alert state in its own alerting view
+- **nginx_exporter** — reads nginx's stub_status endpoint, turns request rate and connection counts into Prometheus metrics
 
-All three deployed via Ansible (playbooks 01-03) same as the previous labs. The dashboard ("webserver01 Overview") is provisioned as code in the repo, not manually configured — which means it'd show up automatically on any new Grafana instance pointed at the same Prometheus data.
+All deployed the same way as before — Ansible playbooks, same server, idempotent.
+
+The Grafana dashboard is provisioned as code in the repo, not manually clicked together, so it'd recreate itself automatically if Grafana ever had to be redeployed.
 
 ## What the metrics are actually showing
 
-Pulled live from Prometheus at time of writing:
+Pulled live from Prometheus:
 
-| Metric | Current Value |
+| Metric | Value |
 |---|---|
 | CPU usage | 0.67% |
 | Memory usage | 7.75% |
 | Disk usage (root) | 11.35% |
-| NGINX requests/sec | ~0.07 req/s |
+| NGINX requests/sec | ~0.07 |
 
-CPU and memory are both really low, which makes sense — this server isn't under any real load, it's just running nginx, a few docker containers, fail2ban, rsyslog, and cron. Nothing compute-intensive. The 7.75% memory usage means out of 11GB available, only about 850MB is in use across all services combined.
+CPU and memory are both really low which makes sense since this server isn't under any actual load — just nginx, some docker containers, fail2ban, rsyslog, and cron running quietly. 7.75% of 11GB is roughly 850MB across everything.
 
-Disk at 11.35% is fine right now (using about 5GB of the 45GB disk), but it's worth watching — the Prometheus time series data in /var/lib/prometheus will grow over time as metrics accumulate. Set to 7-day retention in the config, so it'll cap out and not just grow forever.
+Disk is fine at 11.35% (about 5GB of 45GB used). Worth keeping an eye on though since Prometheus time series data in `/var/lib/prometheus` grows over time. Set the retention to 7 days so it'll cap out instead of filling the disk.
 
-The nginx request rate is barely above zero because nobody's actually hitting this server besides me running test commands. In a real deployment this would tell you whether traffic patterns look normal or whether something's spiking or dropping unexpectedly.
+The nginx request rate is basically zero because nobody's hitting this server except me testing things. In a real deployment that number would tell you if traffic looks normal or something weird is happening.
 
-## Alert rules configured
+## Alerts configured
 
-Three alerts defined in Prometheus:
+Three rules set up in Prometheus:
 
-**InstanceDown** (severity: critical) — fires if any scrape target goes unreachable for 30 seconds. Demonstrated this for real by stopping the node_exporter container — it moved from Pending to Firing in the Prometheus alerts UI, then cleared once node_exporter restarted. This is the most important one because it's a catch-all for "something I'm monitoring just disappeared."
+**InstanceDown** (critical) — fires if any scrape target is unreachable for 30s. This is the one I actually demonstrated — stopped node_exporter on purpose, and after the 30 second `for:` window it flipped from Pending to Firing in the Prometheus alerts UI. Restarting node_exporter cleared it.
 
-**HighCPUUsage** (severity: warning) — fires if average CPU goes over 80% for a full minute. Not triggering currently since CPU is at 0.67%. Would matter for a server under real application load.
+**HighCPUUsage** (warning) — fires if CPU stays above 80% for a minute. Not firing right now obviously with CPU at 0.67%.
 
-**LowDiskSpace** (severity: warning) — fires if root filesystem drops below 15% free. Not triggering now at 11.35% used, but this one is realistic to actually hit over time if the server fills up — Prometheus data, nginx logs, Docker image layers, etc.
+**LowDiskSpace** (warning) — fires when root filesystem drops below 15% free. Not firing now but this one could realistically trigger if the server fills up from Prometheus data, nginx logs, or Docker image storage piling up.
 
-## Operational insights
+## Stuff I noticed from actually looking at the dashboards
 
-The big takeaway from actually looking at the dashboards vs. just assuming the server is fine: memory usage is low but nonzero, and the distribution is interesting — most of it is buff/cache, not active application memory. That's normal Linux behavior (the kernel aggressively uses free RAM for caching) but it looks scarier than it is if you don't know what you're looking at.
+The memory panel looks higher than expected at first glance, but most of it is buff/cache — the Linux kernel just uses free RAM for disk caching, which it gives back when something actually needs it. It's not a leak or a problem, just looks alarming if you don't know what you're looking at.
 
-The metrics also confirmed something I suspected but hadn't verified: all four containers from the last lab plus the three new monitoring containers are running comfortably within the server's resources. Nothing is competing for memory or CPU in any meaningful way. If this were a production environment you'd set memory limits on the Docker containers so they can't accidentally starve each other, but for a lab setup it's fine.
+The alert demo also showed something useful about how Prometheus alerting actually works — when node_exporter went down the `up` metric dropped to 0 immediately on the next scrape, but the alert stayed Pending for the full 30 seconds before flipping to Firing. That's the `for:` field in the alert rule doing its job, preventing one bad scrape from setting off an alert. Good to know when you're trying to screenshot it firing — you have to actually wait, it doesn't happen instantly.
 
-The InstanceDown alert demonstration also exposed a subtle thing — after I stopped node_exporter, Prometheus's own "up" metric for that target dropped to 0 immediately on the next scrape, but the alert stayed in "Pending" state for the full 30 seconds before flipping to "Firing." That's by design (the `for: 30s` in the alert rule) and it prevents brief scrape failures from creating alert noise. Worth knowing when you're trying to actually trigger an alert for a screenshot — you have to wait longer than you expect.
+## What this is missing vs real production
 
-## What's missing vs. a real production setup
+Alerts fire and show up in the Prometheus and Grafana UIs, but nothing actually notifies anyone. A real setup would need Alertmanager or Grafana's contact points wired up to email/Slack/PagerDuty so someone actually gets woken up. Right now it's detection without notification — useful for visibility but not useful for on-call.
 
-The notification side of alerting is incomplete — the alerts fire and are visible in both the Prometheus and Grafana UIs, but nothing actually sends a message anywhere. In a real setup you'd wire up an Alertmanager (for Prometheus-native routing) or Grafana's own contact points (email, Slack, PagerDuty) so that a firing alert actually pages someone. The setup here demonstrates the detection side without the notification side, which is fine for a lab but wouldn't be acceptable for anything actually running 24/7.
-
-The dashboard is also only as useful as the period it's been running — after a few hours there's a real time series to look at, but right now some panels only show a tiny sliver of data since everything was just deployed today. A real monitoring setup has historical baselines to compare against; without those, anomaly detection is basically eyeballing it.
+The dashboards are also only showing a tiny slice of time right now since everything was just deployed today. Historical baselines are what make dashboards actually useful for spotting anomalies — right now it's just showing a flat line with no context for what "normal" looks like.
