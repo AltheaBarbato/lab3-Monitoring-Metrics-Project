@@ -17,11 +17,11 @@ echo "=== current alert state ==="
 curl -s "http://$SERVER_IP:9090/api/v1/alerts" | python3 -m json.tool
 
 echo ""
-echo "Check the screenshot-worthy views now:"
+echo "pause for screenshot!:"
 echo "  http://$SERVER_IP:9090/alerts"
-echo "  http://$SERVER_IP:3000/alerting/list  (Grafana mirrors the same alert via the datasource)"
+echo "  http://$SERVER_IP:3000/alerting/list"
 echo ""
-read -p "Press Enter once you've got your screenshots to restart node_exporter and clear the alert..."
+read -p "Press Enter when done!!!"
 
 echo "=== restarting node_exporter ==="
 ssh $SSH_OPTS "sysadmin@$SERVER_IP" "sudo docker start node_exporter"
