@@ -4,7 +4,7 @@
 Same server again (`webserver01`, `163.192.117.50`). This one adds Prometheus + Grafana on top of everything else, all deployed through Ansible like the last two labs.
 
 ## Layout
-
+```
 lab3-monitoring/
 ├── ansible/
 │   ├── inventory.ini
@@ -23,7 +23,7 @@ lab3-monitoring/
 ├── verify.sh
 ├── alert-demo.sh        stops node_exporter on purpose to fire an alert
 └── docs/operational-analysis.md
-
+```
 ## What's actually collecting metrics
 
 - **node_exporter** - already running from the last lab, system metrics (cpu/mem/disk/network)
