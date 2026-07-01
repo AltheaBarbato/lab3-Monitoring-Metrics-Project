@@ -14,7 +14,7 @@ sleep 45
 
 echo ""
 echo "=== current alert state ==="
-curl -s "http://$SERVER_IP:9090/api/v1/alerts" | python3 -m json.tool
+curl -s "http://$SERVER_IP:9090/api/v1/alerts"
 
 echo ""
 echo "pause for screenshot!:"
@@ -28,4 +28,4 @@ ssh $SSH_OPTS "sysadmin@$SERVER_IP" "sudo docker start node_exporter"
 
 echo "=== waiting 30s for the alert to clear ==="
 sleep 30
-curl -s "http://$SERVER_IP:9090/api/v1/alerts" | python3 -m json.tool
+curl -s "http://$SERVER_IP:9090/api/v1/alerts"
